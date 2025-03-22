@@ -20,6 +20,9 @@ feature_selector = FeatureSelector()
 llm_processor = LLMProcessor()
 visualizer = DataVisualizer()
 
+# 全局变量用于存储数据
+normalized_result = None
+
 # HTML template for visualization
 VIZ_TEMPLATE = """
 <!DOCTYPE html>
@@ -337,7 +340,7 @@ MAIN_TEMPLATE = """
         document.getElementById('requirement').addEventListener('input', function(e) {
             const text = e.target.value.toLowerCase();
             const data2Container = document.getElementById('data2Container');
-            if (text.includes('匹配') || text.includes('相似') || text.includes('match')) {
+            if (text.includes('两个') && (text.includes('表') || text.includes('文件')) && text.includes('相似')) {
                 data2Container.style.display = 'block';
             } else {
                 data2Container.style.display = 'none';
@@ -373,11 +376,11 @@ MAIN_TEMPLATE = """
                     body: formData
                 });
                 
-                const result = await response.text();
+                const result = await response.json();
                 
                 // 解析返回的HTML
                 const parser = new DOMParser();
-                const doc = parser.parseFromString(result, 'text/html');
+                const doc = parser.parseFromString(result.html, 'text/html');
                 
                 // 检查是否有错误
                 const error = doc.querySelector('.error');
@@ -442,122 +445,23 @@ RESULT_TEMPLATE = """
 <html>
 <head>
     <title>数据处理结果</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-            background-color: #f5f5f5;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background-color: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        h1, h2, h3 {
-            color: #333;
-            margin-bottom: 20px;
-        }
-        .plot-container {
-            margin: 20px 0;
-            text-align: center;
-        }
-        .plot-title {
-            font-size: 1.2em;
-            color: #666;
-            margin-bottom: 10px;
-        }
-        img {
-            max-width: 100%;
-            height: auto;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            margin: 10px 0;
-        }
-        .table-container {
-            overflow-x: auto;
-            margin: 20px 0;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 10px 0;
-        }
-        th, td {
-            padding: 8px;
-            border: 1px solid #ddd;
-            text-align: left;
-        }
-        th {
-            background-color: #f8f9fa;
-        }
-        tr:nth-child(even) {
-            background-color: #f8f9fa;
-        }
-        .back-button {
-            display: inline-block;
-            padding: 10px 20px;
-            background-color: #007bff;
-            color: white;
-            text-decoration: none;
-            border-radius: 4px;
-            margin-bottom: 20px;
-        }
-        .back-button:hover {
-            background-color: #0056b3;
-        }
-        .success {
-            color: #28a745;
-            padding: 10px;
-            margin: 10px 0;
-            border: 1px solid #28a745;
-            border-radius: 4px;
-            background-color: #d4edda;
-        }
-        .error {
-            color: #dc3545;
-            padding: 10px;
-            margin: 10px 0;
-            border: 1px solid #dc3545;
-            border-radius: 4px;
-            background-color: #f8d7da;
-        }
+        body { padding: 20px; }
+        .table { margin-top: 1rem; }
     </style>
 </head>
 <body>
     <div class="container">
-        <a href="/" class="back-button">返回首页</a>
-        <h1>数据处理结果</h1>
-        
-        {% if error %}
-            <div class="error">{{ error }}</div>
-        {% else %}
-            {% if operation == 'entity_matcher' %}
-                <div class="match-info">
-                    <h2>匹配结果</h2>
-                    <p>使用的列: {{ columns|join(', ') if columns else "所有共同列" }}</p>
-                </div>
+        <div id="results">
+            {% if error %}
+                <div class="alert alert-danger">{{ error }}</div>
+            {% else %}
+                {{ content | safe }}
             {% endif %}
-            
-            {% if plots %}
-                <div class="plot-container">
-                    <h2>可视化结果</h2>
-                    {% for plot in plots %}
-                        <img src="data:image/png;base64,{{ plot }}" class="img-fluid">
-                    {% endfor %}
-                </div>
-            {% endif %}
-            
-            {% if data is not none %}
-                <div class="table-container">
-                    <h2>数据详情</h2>
-                    {{ data|safe }}
-                </div>
-            {% endif %}
-        {% endif %}
+        </div>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
 """
@@ -610,34 +514,101 @@ def upload_status():
             'message': f'上传失败：{str(e)}'
         })
 
+@app.route('/show_normalized_result')
+def show_normalized_result():
+    if normalized_result is None:
+        return "No data available"
+    
+    original_data, processed_data, used_columns = normalized_result
+    
+    return f"""
+    <!DOCTYPE html>
+    <html lang="zh">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>标准化结果</title>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    </head>
+    <body>
+        <div class="container mt-4">
+            <h2>数据标准化结果</h2>
+            <div class="alert alert-info">
+                <strong>处理信息：</strong><br>
+                - 使用Z-score标准化方法<br>
+                - 处理的列：{', '.join(used_columns)}
+            </div>
+            
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h4>原始数据</h4>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        {original_data.to_html(classes='table table-striped table-bordered', index=True)}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <h4>标准化后的数据</h4>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        {processed_data.to_html(classes='table table-striped table-bordered', index=True)}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mt-3">
+                <a href="/" class="btn btn-primary">返回首页</a>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
 @app.route('/process', methods=['POST'])
 def process_request():
     try:
         # 获取用户输入
         requirement = request.form.get('requirement')
         if not requirement:
-            return render_template_string(RESULT_TEMPLATE, error='请输入您的数据处理需求')
+            return jsonify({
+                'success': False,
+                'html': '<div class="alert alert-danger">请输入您的数据处理需求</div>'
+            })
             
         print(f"Processing requirement: {requirement}")  # Debug log
             
         # 使用LLM解析用户需求
         parsed_request = llm_processor.parse_user_request(requirement)
         if not parsed_request:
-            return render_template_string(RESULT_TEMPLATE, 
-                error='无法理解您的需求。请尝试以下表述：<br>' + 
-                '- "找出两个表中相似的记录"<br>' + 
-                '- "请对name和address列进行模糊匹配"<br>' + 
-                '- "标准化处理数据"')
+            return jsonify({
+                'success': False,
+                'html': render_template_string(RESULT_TEMPLATE, 
+                    error='无法理解您的需求。请尝试以下表述：<br>' + 
+                    '- "找出两个表中相似的记录"<br>' + 
+                    '- "请对name和address列进行模糊匹配"<br>' + 
+                    '- "标准化处理数据"')
+            })
         
         print(f"Parsed request: {parsed_request}")  # Debug log
         
         # 获取数据文件
         if 'data' not in request.files:
-            return render_template_string(RESULT_TEMPLATE, error='请上传数据文件')
+            return jsonify({
+                'success': False,
+                'html': render_template_string(RESULT_TEMPLATE, error='请上传数据文件')
+            })
             
         file = request.files['data']
         if file.filename == '':
-            return render_template_string(RESULT_TEMPLATE, error='请选择文件')
+            return jsonify({
+                'success': False,
+                'html': render_template_string(RESULT_TEMPLATE, error='请选择文件')
+            })
             
         print(f"Processing file: {file.filename}")  # Debug log
             
@@ -650,14 +621,20 @@ def process_request():
             elif file.filename.endswith('.xlsx'):
                 data = pd.read_excel(file)
             else:
-                return render_template_string(RESULT_TEMPLATE, 
-                    error='不支持的文件格式。请上传 .csv, .json 或 .xlsx 文件')
+                return jsonify({
+                    'success': False,
+                    'html': render_template_string(RESULT_TEMPLATE, 
+                        error='不支持的文件格式。请上传 .csv, .json 或 .xlsx 文件')
+                })
                 
             print(f"Successfully loaded file with shape: {data.shape}")  # Debug log
             
         except Exception as e:
             print(f"Error loading file: {str(e)}")  # Debug log
-            return render_template_string(RESULT_TEMPLATE, error=f'读取文件时出错：{str(e)}')
+            return jsonify({
+                'success': False,
+                'html': render_template_string(RESULT_TEMPLATE, error=f'读取文件时出错：{str(e)}')
+            })
             
         # 获取操作类型和方法
         operation = parsed_request['operation']
@@ -669,108 +646,146 @@ def process_request():
         # 根据解析结果调用相应的处理函数
         if operation == 'normalizer':
             processed_data, used_columns, plots = normalizer.normalize(data, method=method)
-            return render_template_string(
-                RESULT_TEMPLATE,
-                operation=operation,
-                columns=used_columns,
-                plots=plots,
-                data=processed_data.to_html(classes='table table-striped')
-            )
-
+            print("output processed_data", processed_data)
+            
+            # 存储结果
+            global normalized_result
+            normalized_result = (data, processed_data, used_columns)
+            
+            # 返回成功消息和查看结果的链接
+            success_html = '''
+                <div class="alert alert-success">
+                    <h4>数据标准化处理完成！</h4>
+                    <p>使用了Z-score标准化方法，处理了以下列：{}</p>
+                    <div class="mt-3">
+                        <button onclick="window.open('http://127.0.0.1:2366/show_normalized_result', '_blank')" class="btn btn-primary btn-lg">
+                            <i class="bi bi-table"></i> 查看标准化结果
+                        </button>
+                    </div>
+                </div>
+            '''.format(', '.join(used_columns))
+            
+            return jsonify({
+                'success': True,
+                'html': success_html
+            })
             
         elif operation == 'transformer':
             processed_data, used_columns, plots = transformer.transform(data, method=method)
-            return render_template_string(
-                RESULT_TEMPLATE,
-                operation=operation,
-                columns=used_columns,
-                plots=plots,
-                data=processed_data.to_html(classes='table table-striped')
-            )
+            return jsonify({
+                'success': True,
+                'html': render_template_string(
+                    RESULT_TEMPLATE,
+                    operation=operation,
+                    columns=used_columns,
+                    plots=plots,
+                    data=processed_data.to_html(classes='table table-striped')
+                )
+            })
             
         elif operation == 'entity_matcher':
-            # 检查是否上传了第二个文件
-            if 'data2' not in request.files:
-                logging.warning("实体匹配缺少第二个文件")
-                return render_template_string(RESULT_TEMPLATE, 
-                    error='实体匹配需要上传两个文件。请上传第二个文件。')
-                
-            file2 = request.files['data2']
-            if file2.filename == '':
-                logging.warning("第二个文件名为空")
-                return render_template_string(RESULT_TEMPLATE, error='请选择第二个文件')
-                
-            logging.info(f"Processing second file: {file2.filename}")
-                
-            # 读取第二个文件
-            try:
-                if file2.filename.endswith('.csv'):
-                    data2 = pd.read_csv(file2)
-                elif file2.filename.endswith('.json'):
-                    data2 = pd.read_json(file2)
-                elif file2.filename.endswith('.xlsx'):
-                    data2 = pd.read_excel(file2)
-                else:
-                    logging.warning(f"不支持的文件格式: {file2.filename}")
-                    return render_template_string(RESULT_TEMPLATE, 
-                        error='不支持的文件格式。请上传 .csv, .json 或 .xlsx 文件')
+            # 检查用户输入是否包含"两个"表格的比较需求
+            needs_two_files = '两个' in requirement and ('表' in requirement or '文件' in requirement) and '相似' in requirement
+            
+            if needs_two_files:
+                # 检查是否上传了第二个文件
+                if 'data2' not in request.files:
+                    return jsonify({
+                        'success': False,
+                        'html': render_template_string(RESULT_TEMPLATE, 
+                            error='需要上传两个文件进行比较。请上传第二个文件。')
+                    })
                     
-                logging.info(f"Successfully loaded second file with shape: {data2.shape}")
-                
-            except Exception as e:
-                logging.error(f"Error loading second file: {str(e)}")
-                return render_template_string(RESULT_TEMPLATE, error=f'读取第二个文件时出错：{str(e)}')
-                
+                file2 = request.files['data2']
+                if file2.filename == '':
+                    return jsonify({
+                        'success': False,
+                        'html': render_template_string(RESULT_TEMPLATE, error='请选择第二个文件')
+                    })
+                    
+                # 读取第二个文件
+                try:
+                    if file2.filename.endswith('.csv'):
+                        data2 = pd.read_csv(file2)
+                    elif file2.filename.endswith('.json'):
+                        data2 = pd.read_json(file2)
+                    elif file2.filename.endswith('.xlsx'):
+                        data2 = pd.read_excel(file2)
+                    else:
+                        return jsonify({
+                            'success': False,
+                            'html': render_template_string(RESULT_TEMPLATE, 
+                                error='不支持的文件格式。请上传 .csv, .json 或 .xlsx 文件')
+                        })
+                except Exception as e:
+                    return jsonify({
+                        'success': False,
+                        'html': render_template_string(RESULT_TEMPLATE, error=f'读取第二个文件时出错：{str(e)}')
+                    })
+            else:
+                # 如果不需要两个文件，就在同一个文件内进行匹配
+                data2 = data.copy()
+            
             try:
-                logging.info("Starting entity matching...")
-                
                 # 使用指定的列进行匹配
                 matches = matcher.match(data, data2, columns=columns)
                 
                 if len(matches) == 0:
-                    return render_template_string(RESULT_TEMPLATE, 
-                        error='未找到完全匹配的记录。请检查数据或尝试其他匹配列。')
-                
-                logging.info("Entity matching completed")
-                logging.info(f"Matches shape: {matches.shape}")
+                    return jsonify({
+                        'success': False,
+                        'html': render_template_string(RESULT_TEMPLATE, 
+                            error='未找到匹配的记录。请检查数据或尝试其他匹配列。')
+                    })
                 
                 # 生成可视化
-                logging.info("Generating visualizations...")
                 plots = visualizer.visualize_data(matches)
-                logging.info(f"Generated {len(plots)} plots")
                 
                 # 添加匹配信息
                 match_info = f"""
                 <div class="match-info">
                     <h3>匹配结果</h3>
-                    <p>找到 {len(matches)} 条完全匹配的记录</p>
+                    <p>找到 {len(matches)} 条匹配的记录</p>
                     <p>匹配列：{', '.join(columns)}</p>
                     <p>结果表格大小：{matches.shape[0]} 行 × {matches.shape[1]} 列</p>
                 </div>
                 """
                 
-                return render_template_string(
-                    RESULT_TEMPLATE,
-                    operation=operation,
-                    columns=columns,
-                    plots=plots,
-                    match_info=match_info,
-                    data=matches.to_html(classes='table table-striped')
-                )
+                return jsonify({
+                    'success': True,
+                    'html': render_template_string(
+                        RESULT_TEMPLATE,
+                        operation=operation,
+                        columns=columns,
+                        plots=plots,
+                        match_info=match_info,
+                        data=matches.to_html(classes='table table-striped')
+                    )
+                })
                 
             except Exception as e:
-                logging.error(f"Error in entity matching: {str(e)}\n{logging.format_exc()}")
-                return render_template_string(RESULT_TEMPLATE, error=f'实体匹配过程中出错：{str(e)}')
+                return jsonify({
+                    'success': False,
+                    'html': render_template_string(RESULT_TEMPLATE, error=f'实体匹配过程中出错：{str(e)}')
+                })
             
         elif operation == 'data_augmentation':
-            return render_template_string(RESULT_TEMPLATE, error='数据增强功能正在开发中...')
+            return jsonify({
+                'success': False,
+                'html': render_template_string(RESULT_TEMPLATE, error='数据增强功能正在开发中...')
+            })
             
         else:
-            return render_template_string(RESULT_TEMPLATE, error='不支持的操作类型')
+            return jsonify({
+                'success': False,
+                'html': render_template_string(RESULT_TEMPLATE, error='不支持的操作类型')
+            })
             
     except Exception as e:
         logging.error(f"Unexpected error: {str(e)}\n{logging.format_exc()}")
-        return render_template_string(RESULT_TEMPLATE, error=f'处理出错：{str(e)}')
+        return jsonify({
+            'success': False,
+            'html': render_template_string(RESULT_TEMPLATE, error=f'处理出错：{str(e)}')
+        })
 
 @app.route('/normalize', methods=['POST'])
 def normalize_data():
@@ -813,12 +828,15 @@ def normalize_data():
 
         # If plots are available, return HTML visualization
         if plots:
-            return render_template_string(
-                VIZ_TEMPLATE,
-                plots=plots,
-                original_data=original_html,
-                normalized_data=normalized_html
-            )
+            return jsonify({
+                'success': True,
+                'html': render_template_string(
+                    VIZ_TEMPLATE,
+                    plots=plots,
+                    original_data=original_html,
+                    normalized_data=normalized_html
+                )
+            })
         
         # Otherwise return JSON response
         if isinstance(normalized_data, pd.DataFrame):

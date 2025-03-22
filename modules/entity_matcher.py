@@ -52,7 +52,9 @@ class EntityMatcher:
         non_match_cols = list(set(df1.columns) | set(df2.columns) - set(columns))
         merged = pd.merge(df1, df2, on=columns, how='inner', 
                          suffixes=('_1', '_2'))
-        
+        print("entity matching成功")
+        print(df1.shape)
+        print(df2.shape)
         if len(merged) == 0:
             print("没有找到完全匹配的记录")
             return pd.DataFrame()  # 返回空DataFrame

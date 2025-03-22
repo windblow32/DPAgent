@@ -39,34 +39,65 @@ class DataVisualizer:
         if not isinstance(processed_data, pd.DataFrame):
             processed_data = pd.DataFrame(processed_data, columns=columns)
             
-        n_features = original_data.shape[1]
-        fig, axes = plt.subplots(2, n_features, figsize=(5*n_features, 8))
+        n_features = len(original_data.columns)
+        fig, axes = plt.subplots(n_features, 2, figsize=(12, 4*n_features))
         
         if n_features == 1:
-            axes = axes.reshape(2, 1)
+            axes = axes.reshape(1, 2)
             
-        # Plot original data distributions
         for i, col in enumerate(original_data.columns):
-            sns.histplot(data=original_data, x=col, kde=True, ax=axes[0, i])
-            axes[0, i].set_title(f'Original {col} Distribution')
+            is_numeric = pd.api.types.is_numeric_dtype(original_data[col])
             
-        # Plot processed data distributions
-        for i, col in enumerate(processed_data.columns):
-            sns.histplot(data=processed_data, x=col, kde=True, ax=axes[1, i])
-            axes[1, i].set_title(f'Processed {col} Distribution {title_suffix}')
+            # Original data distribution (including missing value marker)
+            axes[i, 0].set_title(f'Original {col} Distribution')
+            if is_numeric:
+                sns.histplot(data=original_data, x=col, ax=axes[i, 0], 
+                            stat='density', common_norm=False)
+                sns.kdeplot(data=original_data, x=col, ax=axes[i, 0], color='red')
+            else:
+                # 对分类数据使用条形图
+                value_counts = original_data[col].value_counts(normalize=True)
+                value_counts.plot(kind='bar', ax=axes[i, 0], color='red')
+                axes[i, 0].set_ylabel('Frequency')
             
-        plt.tight_layout()
+            # Processed data distribution
+            axes[i, 1].set_title(f'Processed {col} Distribution {title_suffix}')
+            if is_numeric:
+                sns.histplot(data=processed_data, x=col, ax=axes[i, 1],
+                            stat='density', common_norm=False)
+                sns.kdeplot(data=processed_data, x=col, ax=axes[i, 1], color='red')
+            else:
+                # 对分类数据使用条形图
+                value_counts = processed_data[col].value_counts(normalize=True)
+                value_counts.plot(kind='bar', ax=axes[i, 1], color='red')
+                axes[i, 1].set_ylabel('Frequency')
+            
+            # Add statistics
+            orig_stats = f'Mean: {original_data[col].mean():.2f}\nStd: {original_data[col].std():.2f}'
+            proc_stats = f'Mean: {processed_data[col].mean():.2f}\nStd: {processed_data[col].std():.2f}'
+            
+            axes[i, 0].text(0.95, 0.95, orig_stats,
+                          transform=axes[i, 0].transAxes,
+                          verticalalignment='top',
+                          horizontalalignment='right',
+                          bbox=dict(facecolor='white', alpha=0.8))
+            
+            axes[i, 1].text(0.95, 0.95, proc_stats,
+                          transform=axes[i, 1].transAxes,
+                          verticalalignment='top',
+                          horizontalalignment='right',
+                          bbox=dict(facecolor='white', alpha=0.8))
+            
+            # 调整分类数据的刻度标签
+            if not is_numeric:
+                for ax in [axes[i, 0], axes[i, 1]]:
+                    ax.tick_params(axis='x', rotation=45)
         
-        # Convert plot to base64 string
-        buffer = BytesIO()
-        plt.savefig(buffer, format='png', dpi=300, bbox_inches='tight')
-        buffer.seek(0)
-        image_png = buffer.getvalue()
-        buffer.close()
+        plt.tight_layout()
+        result = self.plot_to_base64(fig)
         plt.close()
         
-        graphic = base64.b64encode(image_png)
-        return graphic.decode('utf-8')
+        return result
         
     def create_boxplots(self, original_data, processed_data, columns=None, title_suffix=""):
         """
@@ -278,3 +309,54 @@ class DataVisualizer:
             print(f"生成可视化时出错: {str(e)}")
             
         return plots
+
+    def plot_missing_values(self, data, title="Missing Values Pattern"):
+        """
+        Create a visualization of the missing value pattern
+        
+        Args:
+            data: DataFrame
+            title: Plot title
+            
+        Returns:
+            Base64 encoded PNG image
+        """
+        # Create a heatmap of missing values
+        plt.figure(figsize=(10, 6))
+        
+        # Calculate missing values for each cell
+        missing_matrix = data.isnull()
+        
+        # Create a heatmap
+        sns.heatmap(missing_matrix, 
+                   cmap=['lightgreen', 'red'],
+                   cbar_kws={'label': 'Missing'},
+                   yticklabels=False)
+        
+        # Set title and labels
+        plt.title(title)
+        plt.xlabel('Features')
+        plt.ylabel('Samples')
+        
+        # Add missing value statistics
+        missing_stats = data.isnull().sum()
+        stats_text = "Missing Values per Feature:\n"
+        for col, count in missing_stats.items():
+            if count > 0:
+                percentage = (count / len(data)) * 100
+                stats_text += f"{col}: {count} ({percentage:.1f}%)\n"
+        
+        plt.figtext(1.02, 0.5, stats_text,
+                   bbox=dict(facecolor='white', alpha=0.8),
+                   fontsize=8,
+                   verticalalignment='center')
+        
+        # Adjust layout to fit statistics
+        plt.tight_layout()
+        
+        # Convert to base64
+        fig = plt.gcf()
+        result = self.plot_to_base64(fig)
+        plt.close()
+        
+        return result
