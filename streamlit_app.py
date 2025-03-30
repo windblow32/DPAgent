@@ -71,7 +71,11 @@ def main():
                                 return
                             
                             if parsed_request['operation'] == 'all':
-                                # 1. 首先进行表格规范化
+                                
+                                # 子集划分
+                                # 输出划分结果，划分规则
+
+
                                 st.subheader("第一步：表格规范化")
                                 
                                 try:
@@ -179,45 +183,72 @@ def main():
                                         st.write("**填充后数据缺失值统计:**")
                                         st.write(imputed_data.isnull().sum())
                                     
-                                    # 3. 然后进行标准化
-                                    st.subheader("第三步：数据标准化")
-                                    processed_data, used_columns, plots = normalizer.normalize(
-                                        imputed_data,
-                                        method='zscore',
-                                        columns=numeric_cols
-                                    )
+                                    # 实体识别输入数据，haoxuan 实现
+                                    st.subheader("第三步：实体识别")
+                                    st.write("构建相似度函数推荐规则，开始分析列统计信息")
+                                    st.write("length variance")
+
+                                    st.write("提示：subset2 length variance 过低，need rule-augmented data generation")
+                                    # 提供按钮，执行数据生成
+                                    st.subheader("数据生成")
+                                    # explanation of generator(里面写生成的依据)
+                                    # 输出生成结果
+                                    st.write("**生成后的数据概览:**")
+                                    # 点击show generated data按钮，显示生成结果(只展示生成的数据)
+                                
+
+                                    st.subheader("continue with entity matching...")
+                                    # apply augmented data（展示合并后的数据）
+                                    # 显示：mining similarity recommmendation rules,
+                                    # 输出子集划分的规则
+                                    # 
+                                
+
                                     
-                                    # 显示标准化结果
-                                    col1, col2, col3 = st.columns([1, 1, 1])
+
+                                    # 弹出窗口
                                     
-                                    with col1:
-                                        st.subheader("处理信息")
-                                        st.info(f"""
-                                        缺失值填充:
-                                        - 使用智能填充
-                                        - 处理的列: {', '.join(numeric_cols)}
+
+
+                                    # # 进行标准化
+                                    # st.subheader("第四步：数据标准化")
+                                    # processed_data, used_columns, plots = normalizer.normalize(
+                                    #     imputed_data,
+                                    #     method='zscore',
+                                    #     columns=numeric_cols
+                                    # )
+                                    
+                                    # # 显示标准化结果
+                                    # col1, col2, col3 = st.columns([1, 1, 1])
+                                    
+                                    # with col1:
+                                    #     st.subheader("处理信息")
+                                    #     st.info(f"""
+                                    #     缺失值填充:
+                                    #     - 使用智能填充
+                                    #     - 处理的列: {', '.join(numeric_cols)}
                                         
-                                        标准化处理:
-                                        - 使用方法: zscore
-                                        - 处理的列: {', '.join(used_columns)}
-                                        """)
+                                    #     标准化处理:
+                                    #     - 使用方法: zscore
+                                    #     - 处理的列: {', '.join(used_columns)}
+                                    #     """)
                                     
-                                    with col2:
-                                        st.subheader("原始数据")
-                                        st.dataframe(df)
+                                    # with col2:
+                                    #     st.subheader("原始数据")
+                                    #     st.dataframe(df)
                                     
-                                    with col3:
-                                        st.subheader("处理后的数据")
-                                        st.dataframe(processed_data)
+                                    # with col3:
+                                    #     st.subheader("处理后的数据")
+                                    #     st.dataframe(processed_data)
                                     
-                                    # 提供下载处理后的数据
-                                    st.download_button(
-                                        "下载处理后的数据",
-                                        processed_data.to_csv(index=False).encode('utf-8'),
-                                        "processed_data.csv",
-                                        "text/csv",
-                                        key='download-csv'
-                                    )
+                                    # # 提供下载处理后的数据
+                                    # st.download_button(
+                                    #     "下载处理后的数据",
+                                    #     processed_data.to_csv(index=False).encode('utf-8'),
+                                    #     "processed_data.csv",
+                                    #     "text/csv",
+                                    #     key='download-csv'
+                                    # )
                                     
                                 except Exception as e:
                                     st.error(f"数据处理时出错：{str(e)}")
